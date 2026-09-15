@@ -682,3 +682,116 @@ strong {
 * **Evasion Techniques:**
   * **In-Memory Patching:** Malware locate `ntdll!EtwEventWrite` bên trong memory space của `WmiPrvSE.exe` và ghi đè vài bytes đầu tiên bằng một RET (return) instruction, qua đó lặng lẽ drop nguồn data.
   * **Provider Disabling:** Attackers lạm dụng quyền admin để tắt hoàn toàn logging channel bằng cách sử dụng các công cụ có sẵn (ví dụ: `wevtutil sl Microsoft-Windows-WMI-Activity/Operational /e:false`).
+
+  
+---
+<!-- class: default -->
+
+<style scoped>
+h1 {
+  text-align: center;
+  margin-top: 0px;
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+h4 {
+  border-bottom: none;
+  margin-top: 10px;
+  font-size: 30px;
+}
+p, li {
+  font-size: 26px;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+strong {
+  color: #0056b3;
+}
+</style>
+
+# T1047 - WMI
+
+#### Simulation - Cinnamon Tempest
+
+* **Threat Context:** Cinnamon Tempest tận dụng các công cụ LotL cho quá trình lateral movement nhằm ẩn mình vào các hành động legit của admin.
+* **Techniques:** Sử dụng `wmiexec.py` của Impacket để thiết lập một kết nối DCOM/RPC ban đầu qua TCP port 135 nhằm trigger WMI execution.
+* **Mechanics:** Quá trình WMI process creation của Windows sẽ không có output và không có return stream; attacker bắt buộc phải wrap execution vào `cmd.exe` và điều hướng `stdout` / `stderr` thông qua SMB để giả lập một phiên semi-interactive.
+
+---
+<!-- class: default -->
+
+<style scoped>
+h1 {
+  text-align: center;
+  margin-top: 0px;
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+h4 {
+  border-bottom: none;
+  margin-top: 10px;
+  font-size: 30px;
+}
+p, li {
+  font-size: 26px;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+strong {
+  color: #0056b3;
+}
+</style>
+
+# T1047 - WMI
+
+#### Simulation - Cinnamon Tempest
+
+* **Command-Line Telemetry:** Các process creation logs (Sysmon Event ID 1 / Security Event ID 4688) cho thấy `WmiPrvSE.exe` spawning `cmd.exe` chứa redirection string đặc trưng (`\\127.0.0.1\ADMIN$\__<timestamp>`).
+* **Disk & Share Artifacts:** Các ephemeral files `__<timestamp>` được ghi vào `C:\Windows\` thông qua `ADMIN$` share; những sessions chưa kết thúc hoặc bị ngắt đột ngột sẽ để lại các file text trên ổ đĩa.
+* **Telemetry Correlation:** Dấu vết đáng tin cậy phụ thuộc vào việc correlating DCOM network connection (TCP 135), quá trình child process creation của `WmiPrvSE.exe`, và truy cập file SMB share ngay sau đó (Security Event ID 5145) bên trong một khoảng thời gian ngắn.
+
+---
+<!-- class: default -->
+
+<style scoped>
+h1 {
+  text-align: center;
+  margin-top: 0px;
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+table {
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 20px;
+  font-size: 20px;
+  border-collapse: collapse;
+  width: 100%;
+}
+th, td {
+  border: 1px solid #ccc;
+  padding: 12px;
+  text-align: left;
+}
+th {
+  background-color: #f4f4f4;
+  color: #333;
+}
+strong {
+  color: #0056b3;
+}
+code {
+  white-space: nowrap;
+}
+</style>
+
+# T1047 - WMI
+
+| Execution Phase | Log Source | Event ID | Telemetry Details |
+|---|---|---|---|
+| **Authentication** | Windows Security | `4624` | Logon Type 3 (Network logon) via NTLM or Kerberos over RPC/SMB. |
+| **Method Invocation** | WMI-Activity (Trace) | `11` | Method invocation capturing `Win32_Process::Create` and the caller context. |
+| **Process Spawning** | Sysmon / Security | `1` / `4688` | `WmiPrvSE.exe` spawning `cmd.exe` containing redirection to `\\127.0.0.1\ADMIN$\__<timestamp>`. |
+| **Share Interaction** | Windows Security | `5140` / `5145` | Share access and detailed object checking on `ADMIN$` and `IPC$`. |
+| **File Creation & Cleanup** | Sysmon | `11` / `23` | Creation of `C:\Windows\__<timestamp>` on disk, followed by deletion upon output retrieval. |
+
