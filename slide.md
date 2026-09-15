@@ -187,3 +187,75 @@ strong {
 * **The LotL Advantage:** Bởi vì đây là một tiện ích thiết yếu, có sẵn và không thể gỡ nó mà không làm hỏng OS, các attackers thường lạm dụng nó cho các hoạt động Living-off-the-Land (LotL) nhằm bypass các signature-based security controls.
 * **ATT&CK Mapping (T1047):** Framework này chính thức phân loại hành vi này thuộc Execution tactics.
 
+
+---
+<!-- class: default -->
+
+<style scoped>
+h1 {
+  text-align: center;
+  margin-top: 0px;
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+h4 {
+  border-bottom: none;
+  margin-top: 10px;
+  font-size: 30px;
+}
+p, li {
+  font-size: 26px;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+strong {
+  color: #0056b3;
+}
+</style>
+
+# T1047 - WMI
+
+#### WMI & CIM Definitions
+
+* **WMI:** Bản triển khai của Microsoft đối với Web-Based Enterprise Management (WBEM). Nó cung cấp một giao diện có sẵn cho việc local và remote system querying, configuration và monitoring.
+* **CIM (Common Information Model):** Một tiêu chuẩn open-source định nghĩa một object-oriented schema không đặc trưng cho bất cứ nhà cung cấp nào để đại diện cho các hardware, software và network components.
+* **The Relationship:** CIM thiết lập standard cho conceptual framework và baseline schema, trong khi WMI đóng vai trò là execution engine để triển khai standard này dành riêng cho Windows.
+
+---
+<!-- class: default -->
+
+<style scoped>
+h1 {
+  text-align: center;
+  margin-top: 0px;
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+h4 {
+  border-bottom: none;
+  margin-top: 10px;
+  font-size: 30px;
+}
+p, li {
+  font-size: 26px;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+strong {
+  color: #0056b3;
+}
+</style>
+
+# T1047 - WMI
+
+#### WMI Infrastructure & Components
+
+* **WMI Service (winmgmt):** Core routing và processing broker chạy liên tục trong nền để bắt và chuyển các queries.
+* **WMI Repository (OBJECTS.DATA):** Central binary database lưu trữ các định nghĩa, namespaces, và persistent object instances của CIM class tĩnh.
+* **WMI Providers:** Các Component Object Model (COM) DLLs đảm nhiệm việc querying OS theo thời gian thực để populate data cho các namespaces như root\cimv2.
+
+---
+<!-- class: default -->
+
+![bg fit](architecture.png)
+
