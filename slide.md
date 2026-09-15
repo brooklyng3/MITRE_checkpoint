@@ -643,3 +643,42 @@ code {
 | **Operational** | `5858` | Query and method execution errors (flags malformed or failed reconnaissance). |
 | **Operational** | `5859, 5860, 5861` | WMI Event Filter, Consumer, and Binding activity (identifies persistence). |
 | **Trace** | `11` | Method invocation (captures `Win32_Process::Create`, caller PID, and user context). |
+
+---
+<!-- class: default -->
+
+<style scoped>
+h1 {
+  text-align: center;
+  margin-top: 0px;
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+h4 {
+  border-bottom: none;
+  margin-top: 10px;
+  font-size: 30px;
+}
+p, li {
+  font-size: 26px;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+li li {
+  font-size: 24px;
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+strong {
+  color: #0056b3;
+}
+</style>
+
+# T1047 - WMI
+
+#### Blinding ETW (Defense Evasion)
+
+* **The Telemetry Problem:** Bởi vì ETW cung cấp thông tin chi tiết vào quá trình thực thi các program qua WMI, các attackers tích cực nhắm vào nó để tránh bị phát hiện.
+* **Evasion Techniques:**
+  * **In-Memory Patching:** Malware locate `ntdll!EtwEventWrite` bên trong memory space của `WmiPrvSE.exe` và ghi đè vài bytes đầu tiên bằng một RET (return) instruction, qua đó lặng lẽ drop nguồn data.
+  * **Provider Disabling:** Attackers lạm dụng quyền admin để tắt hoàn toàn logging channel bằng cách sử dụng các công cụ có sẵn (ví dụ: `wevtutil sl Microsoft-Windows-WMI-Activity/Operational /e:false`).
