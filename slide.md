@@ -795,3 +795,284 @@ code {
 | **Share Interaction** | Windows Security | `5140` / `5145` | Share access and detailed object checking on `ADMIN$` and `IPC$`. |
 | **File Creation & Cleanup** | Sysmon | `11` / `23` | Creation of `C:\Windows\__<timestamp>` on disk, followed by deletion upon output retrieval. |
 
+---
+<!-- class: default -->
+
+<style scoped>
+h1 {
+  text-align: center;
+  margin-top: 0px;
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+h4 {
+  border-bottom: none;
+  margin-top: 10px;
+  font-size: 30px;
+}
+p, li {
+  font-size: 19px; /* Slightly reduced to fit 4 long bullet points */
+  line-height: 1.6;
+  margin-bottom: 18px;
+}
+strong {
+  color: #0056b3;
+}
+</style>
+
+# T1047 - WMI
+
+#### Mitigation
+
+* **Access Control & Namespace Security:** Loại bỏ các tài khoản local administrator không cần thiết và hạn chế người dùng thuộc group Distributed COM Users. Hạn chế các quyền Remote Launch/Activation thông qua `dcomcnfg.exe`, và thu hồi quyền Remote Enable trên các critical namespaces như `root\cimv2` bằng cách sử dụng `wmimgmt.msc`.
+* **WMIC Phased Deprecation:** Dịch chuyển các workflows sang các modern CIM/PowerShell cmdlets và loại bỏ `wmic.exe` qua ba giai đoạn: Audit (WDAC/AppLocker + Sysmon Event 1 / Security Event 4688), Enforce (execution blocking), và Removal (uninstalling optional feature).
+* **DCOM Protocol Hardening (CVE-2021-26414):** Đảm bảo deploy các bản vá nhằm enforce bắt buộc `RPC_C_AUTHN_LEVEL_PKT_INTEGRITY` để ngăn chặn các RPC activation bypasses và relay attacks. Audit các client Event IDs 10037 và 10038 để phát hiện các legacy software không tương thích.
+* **Network Microsegmentation:** Triển khai các host firewalls và ACLs để chặn workstation-to-workstation lateral movement. Hạn chế inbound traffic trên TCP 135 (RPC/DCOM) và TCP 5985/5986 (WinRM) chỉ cho phép từ các jump-hosts được chấp thuận, central management servers, và administrative subnets.
+
+---
+<!-- class: default -->
+
+<style scoped>
+h1 {
+  text-align: center;
+  margin-top: 0px;
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+h4 {
+  border-bottom: none;
+  margin-top: 10px;
+  font-size: 30px;
+}
+p, li {
+  font-size: 18px;
+  line-height: 1.6;
+  margin-bottom: 18px;
+}
+li li {
+  font-size: 16px;
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+strong {
+  color: #0056b3;
+}
+</style>
+
+# T1021.002 - SMB admin share
+
+#### Overview
+
+* **MITRE ATT&CK Classification:** Được phân loại thuộc nhóm Lateral Movement (TA0008), định nghĩa cách các adversaries sử dụng tài khoản hợp lệ để tương tác với các remote network shares thông qua SMB.
+* **Transport & Networking:** Hoạt động qua TCP Port 445, đóng vai trò quan trọng cho các việc chuyển file hợp lệ và encapsulated protocol traffic.
+* **Dual Operational Role:**
+  * **Payload & Staging:** Hỗ trợ việc ghi các malicious binaries xuống disk và thu thập các command execution outputs thông qua các hidden shares.
+  * **RPC tunnel:** Đóng vai trò là transport layer để tunnel Distributed Computing Environment / Remote Procedure Calls (DCE/RPC) giữa các endpoints.
+* **Execution Prerequisites:**
+  * **Elevated Credentials (T1078):** Yêu cầu quyền local administrator, do các standard user accounts bị block hoàn toàn khỏi các default administrative shares.
+  * **Network Reachability:** Yêu cầu unfiltered host-to-host connectivity qua TCP port 445 với SMB service đang active trên target.
+
+---
+<!-- class: default -->
+
+<style scoped>
+table {
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 60px;
+  font-size: 22px;
+  border-collapse: collapse;
+  width: 100%;
+}
+th, td {
+  border: 1px solid #ccc;
+  padding: 15px;
+  text-align: left;
+}
+th {
+  background-color: #f4f4f4;
+  color: #333;
+}
+strong {
+  color: #0056b3;
+}
+code {
+  white-space: nowrap;
+}
+.caption {
+  text-align: center;
+  font-size: 26px;
+  margin-top: 40px;
+  font-weight: bold;
+  color: #333;
+}
+</style>
+
+| Share Name | Mapped Path / Nature | Access Requirement | Primary Adversary Use Case |
+|---|---|---|---|
+| **ADMIN$** | `C:\Windows` (System Root) | Local Administrator | Staging malicious payloads and executables prior to invoking remote execution. |
+| **C$** | `C:\` (Volume Root) | Local Administrator | Reading/writing temporary batch scripts and capturing redirected command output (e.g., `__output`). |
+| **IPC$** | Inter-Process Communication (Virtual conduit, no disk path) | Authenticated Users / Admins | Authenticating against the target to access named pipes, which then serve as the underlying transport for RPC interactions. |
+
+<p class="caption">Admin shares</p>
+
+---
+<!-- class: default -->
+
+<style scoped>
+h1 {
+  text-align: center;
+  margin-top: 0px;
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+h4 {
+  border-bottom: none;
+  margin-top: 10px;
+  font-size: 30px;
+}
+p, li {
+  font-size: 26px;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+strong {
+  color: #0056b3;
+}
+</style>
+
+# T1021.002 - SMB admin share
+
+#### RPC over Named Pipes
+
+* **The Conceptual Gateway:** Khác với các administrative shares khác, `IPC$` share không map với một file/thư mục nào trên ổ đĩa. Nó hoạt động hoàn toàn như một giao diện cho IPC giữa các clients, servers và services trên các network endpoints.
+* **The Transport Layer:** Bằng cách thiết lập một kết nối xác thực đến `IPC$` qua SMB, attackers có access vào các named pipes, đóng vai trò là underlying transport mechanism cho Remote Procedure Calls (RPC).
+* **Fileless Advantage:** Việc layering RPC trên các SMB named pipes cho phép kẻ xấu invoke các remote system APIs và thực thi functions trên target machine mà không cần dùng tool ngoài, bypass yêu cầu phải drop các physical executables xuống disk trước.
+
+---
+<!-- class: default -->
+
+<style scoped>
+h1 {
+  text-align: center;
+  margin-top: 0px;
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+h4 {
+  border-bottom: none;
+  margin-top: 10px;
+  font-size: 30px;
+}
+p {
+  font-size: 24px;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+table {
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 20px;
+  font-size: 20px;
+  border-collapse: collapse;
+  width: 100%;
+}
+th, td {
+  border: 1px solid #ccc;
+  padding: 15px;
+  text-align: left;
+}
+th {
+  background-color: #f4f4f4;
+  color: #333;
+}
+code {
+  white-space: nowrap;
+}
+</style>
+
+# T1021.002 - SMB admin share
+
+#### Targeting System Services
+
+Một khi kênh liên lạc được thiết lập thông qua `IPC$`, attackers tiến hành bind vào các named pipes cụ thể nhằm biến các legitimate network protocols thành các robust channels phục vụ cho remote administration và command execution.
+
+| Named Pipe | Target Service | Offensive Use Case & Mechanics |
+|---|---|---|
+| `\pipe\svcctl` | Service Control Manager | Allows attackers to remotely create, start, or modify services. This is the core mechanic driving execution tools like `PsExec` and `smbexec`. |
+| `\pipe\atsvc` | Task Scheduler | Interacts with the remote Task Scheduler to silently register and execute tasks, commonly abused by tools like `atexec`. |
+| `\pipe\epmapper` | RPC Endpoint Mapper | Utilized for deep reconnaissance to enumerate exposed RPC services and map them to their corresponding listening ports. |
+
+---
+<!-- class: default -->
+
+<style scoped>
+h1 {
+  text-align: center;
+  margin-top: 0px;
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+h4 {
+  border-bottom: none;
+  margin-top: 10px;
+  font-size: 30px;
+}
+p, li {
+  font-size: 26px;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+strong {
+  color: #0056b3;
+}
+</style>
+
+# T1021.002 - SMB admin share
+
+#### Authentication Exploitation - Pass-the-Hash (PtH)
+
+* **Core Mechanics:** Pass-the-Hash cho phép các attackers authenticate vào các remote SMB services bằng cách inject NTLM hash bắt được trực tiếp vào authentication protocol, qua đó bypass các standard interactive logon requirements mà không cần đến tài khoản và mật khẩu.
+* **Execution Prerequisite:** Để sử dụng thành công technique này thông qua T1021.002, injected hash phải thuộc về một account có quyền admin local, do các tài khoản của người dùng bình thường không thể authenticate vào các hidden administrative shares như `ADMIN$` hoặc `C$`.
+
+---
+<!-- class: default -->
+
+<style scoped>
+h1 {
+  text-align: center;
+  margin-top: 0px;
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+h4 {
+  border-bottom: none;
+  margin-top: 10px;
+  font-size: 30px;
+}
+p, li {
+  font-size: 22px;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+li li {
+  font-size: 20px;
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+strong {
+  color: #0056b3;
+}
+</style>
+
+# T1021.002 - SMB admin share
+
+#### Authentication Exploitation - NTLM Downgrade
+
+* **Strategic Objective:** Được chain với `PtH` trong các hệ thống có legacy settings enabled nhằm buộc targets phải đàm phán các protocol có security levels yếu hơn hoặc cryptographically flawed.
+* **Attack Progression:**
+  * **Authentication Coercion:** buộc target authenticate tới đến một attacker-controlled listener.
+  * **Negotiation Tampering:** Tắt Extended Session Security (ESS) trong quá trình negotiation để buộc sử dụng chuẩn `NTLMv1`.
+  * **Challenge Control:** gửi một static challenge để capture vulnerable `NTLMv1-SSP` response.
+  * **Hash Recovery:** Tìm được `NT hash` ban đầu một cách nhanh chóng bằng cách sử dụng bảng cầu vồng được tính toán sẵn.
+* **Execution Outcome:** `NT hash` được recover sẽ được feed trực tiếp vào SMB tooling để có thể `RCE` mà không cần có plaintext password.
