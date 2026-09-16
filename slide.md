@@ -1076,3 +1076,5 @@ strong {
   * **Challenge Control:** gửi một static challenge để capture vulnerable `NTLMv1-SSP` response.
   * **Hash Recovery:** Tìm được `NT hash` ban đầu một cách nhanh chóng bằng cách sử dụng bảng cầu vồng được tính toán sẵn.
 * **Execution Outcome:** `NT hash` được recover sẽ được feed trực tiếp vào SMB tooling để có thể `RCE` mà không cần có plaintext password.
+
+
