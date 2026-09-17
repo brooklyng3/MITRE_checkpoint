@@ -910,8 +910,8 @@ code {
 
 | Share Name | Mapped Path / Nature | Access Requirement | Primary Adversary Use Case |
 |---|---|---|---|
-| **ADMIN$** | `C:\Windows` (System Root) | Local Administrator | Staging malicious payloads and executables prior to invoking remote execution. |
-| **C$** | `C:\` (Volume Root) | Local Administrator | Reading/writing temporary batch scripts and capturing redirected command output (e.g., `__output`). |
+| **ADMIN\$** | `C:\Windows` (System Root) | Local Administrator | Staging malicious payloads and executables prior to invoking remote execution. |
+| **C\$** | `C:\` (Volume Root) | Local Administrator | Reading/writing temporary batch scripts and capturing redirected command output (e.g., `__output`). |
 | **IPC$** | Inter-Process Communication (Virtual conduit, no disk path) | Authenticated Users / Admins | Authenticating against the target to access named pipes, which then serve as the underlying transport for RPC interactions. |
 
 <p class="caption">Admin shares</p>
@@ -1078,3 +1078,262 @@ strong {
 * **Execution Outcome:** `NT hash` được recover sẽ được feed trực tiếp vào SMB tooling để có thể `RCE` mà không cần có plaintext password.
 
 
+---
+<!-- class: default -->
+
+<style scoped>
+h1 {
+  text-align: center;
+  margin-top: 0px;
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+h4 {
+  border-bottom: none;
+  margin-top: 10px;
+  font-size: 30px;
+}
+p, li {
+  font-size: 24px;
+  line-height: 1.6;
+  margin-bottom: 18px;
+}
+strong {
+  color: #0056b3;
+}
+</style>
+
+# T1021.002 - SMB admin share
+
+#### Execution - PsExec (SCM Abuse)
+
+* **Payload Staging:** authenticate qua SMB và drop một executable payload trực tiếp vào một admin share (VD: `ADMIN$`).
+* **RPC connection:** Thiết lập một kết nối RPC đến Service Control Manager (SCM) bằng cách bind vào named pipe `\pipe\svcctl`.
+* **Service Creation & Execution:** Sử dụng SCM RPC calls để tạo một Windows service trỏ đến payload, chạy payload với quyền SYSTEM.
+* **Interactive I/O & Cleanup:** Tạo một named pipe thứ 2 để wrap các standard input, output, và error streams cho một interactive shell. Khi hoàn thành, công cụ sẽ dừng service, xóa đăng ký service, và xóa payload khỏi disk.
+
+---
+<!-- class: default -->
+
+<style scoped>
+h1 {
+  text-align: center;
+  margin-top: 0px;
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+h4 {
+  border-bottom: none;
+  margin-top: 10px;
+  font-size: 30px;
+}
+p, li {
+  font-size: 24px;
+  line-height: 1.6;
+  margin-bottom: 18px;
+}
+strong {
+  color: #0056b3;
+}
+</style>
+
+# T1021.002 - SMB admin share
+
+#### Execution - SMBExec (Command string execution)
+
+* **Service Creation (No Binary Drop):** Authenticate qua SMB và tương tác với SCM thông qua `\pipe\svcctl` để tạo một service có execution path hoàn toàn dựa vào native `%COMSPEC%` environment variable (resolve thành `cmd.exe`).
+* **Batch File Staging:** Command của attacker được thực thi bởi `cmd.exe`, process này sẽ ghi các instructions trực tiếp vào một batch file tạm thời (`.bat`) được lưu trên admin share, vd như `C$`.
+* **Output Redirection:** Batch file tạm thời sẽ execute payload, đồng thời redirect các standard output và standard error streams vào một file text tạm thời (ví dụ như `__output`), cũng được đặt trên `C$` share.
+* **Retrieval & Cleanup:** Retrieve results bằng cách đọc output file trực tiếp thông qua SMB connection, ngay lập tức sau đó tiến hành xóa service, batch files và output files để xóa dấu vết.
+
+---
+<!-- class: default -->
+
+<style scoped>
+h1 {
+  text-align: center;
+  margin-top: 0px;
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+h4 {
+  border-bottom: none;
+  margin-top: 10px;
+  font-size: 30px;
+}
+p, li {
+  font-size: 24px;
+  line-height: 1.6;
+  margin-bottom: 18px;
+}
+strong {
+  color: #0056b3;
+}
+</style>
+
+# T1021.002 - SMB admin share
+
+#### Execution - `atexec` (Task Scheduler)
+
+* **SCM Evasion:** Bypass SCM để tránh generate Service Creation logs.
+* **RPC:** Authenticate qua SMB và sử dụng Task Scheduler RPC interface thông qua `\pipe\atsvc` named pipe.
+* **Task Execution:** Viết execution instruction vào 1 batch file tạm thời, rồi tạo một scheduled task được cấu hình để chạy batch file đó ngay lập tức qua `cmd.exe`.
+* **Output & Cleanup:** Redirect command output vào một file tạm thời (thường nằm ở `C:\Windows\Temp`), lấy kết quả qua `ADMIN$` hoặc `C$` share thông qua SMB, và delete cả task lẫn files nhằm loại bỏ các forensic artifacts.
+
+
+---
+<!-- class: default -->
+
+<style scoped>
+h1 {
+  text-align: center;
+  margin-top: 0px;
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+h4 {
+  border-bottom: none;
+  margin-top: 10px;
+  font-size: 30px;
+}
+p, li {
+  font-size: 24px;
+  line-height: 1.6;
+  margin-bottom: 18px;
+}
+strong {
+  color: #0056b3;
+}
+</style>
+
+# T1021.002 - SMB admin share
+
+#### Execution - WMI
+
+* **No named pipes:** Sử dụng DCOM qua TCP port 135 để tương tác với WMI, không sử dụng named pipes.
+* **Process creation:** Invoke class `Win32_Process` để spawn một command shell dưới dạng một child process của WMI Provider Host (`wmiprvse.exe`).
+* **Output Redirection:** Redirect command output vào một file nằm trực tiếp trên `ADMIN$` share.
+* **SMB Retrieval:** Retrieve execution results bằng cách đọc file này thông qua một kết nối SMB trước khi clean up các artifacts.
+
+---
+<!-- class: default -->
+
+<style scoped>
+table {
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 20px;
+  font-size: 18px; /* Reduced slightly to fit all 5 columns perfectly */
+  border-collapse: collapse;
+  width: 100%;
+}
+th, td {
+  border: 1px solid #ccc;
+  padding: 12px;
+  text-align: left;
+  vertical-align: top;
+}
+th {
+  background-color: #f4f4f4;
+  color: #333;
+}
+strong {
+  color: #0056b3;
+}
+code {
+  white-space: nowrap;
+}
+</style>
+
+| Tool / Framework | Primary Mechanism | Payload Staging | Execution Trigger | Key Forensic Artifacts |
+|---|---|---|---|---|
+| **PsExec** | Service Control Manager via `\pipe\svcctl` | Drops a physical executable binary to a share (e.g., `ADMIN$`). | Dynamic Windows Service. | Physical binary on disk; Service Creation logs (Event ID 7045) showing the executable path. |
+| **smbexec** | Service Control Manager via `\pipe\svcctl` | Native `%COMSPEC%` writes commands to a temporary `.bat` file (e.g., `C$`). | Windows Service executing a command string. | Ephemeral `.bat` and output files; Service Creation logs (Event ID 7045) revealing the full command string. |
+| **atexec** | Task Scheduler via `\pipe\atsvc` | Writes execution instructions to a temporary `.bat` file. | Ephemeral Scheduled Task. | Scheduled task logs; temporary `.bat` and output files (e.g., in `C:\Windows\Temp`) |
+| **wmiexec** | WMI/DCOM via TCP port 135 | Direct command execution string. | `Win32_Process` class instantiation. | `wmiprvse.exe` spawning `cmd.exe`; temporary output text file on `ADMIN$` |
+
+---
+<!-- class: default -->
+
+<style scoped>
+h1 {
+  text-align: center;
+  margin-top: 0px;
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+h4 {
+  border-bottom: none;
+  margin-top: 10px;
+  font-size: 30px;
+}
+p {
+  font-size: 24px;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+table {
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 20px;
+  font-size: 22px;
+  border-collapse: collapse;
+  width: 100%;
+}
+th, td {
+  border: 1px solid #ccc;
+  padding: 15px;
+  text-align: left;
+}
+th {
+  background-color: #f4f4f4;
+  color: #333;
+}
+code {
+  white-space: nowrap;
+}
+</style>
+
+# T1021.002 - SMB admin share
+
+#### P2P C2 Architecture
+
+Các attackers kết nối các endpoint nội bộ với nhau thông qua SMB named pipes (`TCP port 445`) để proxy C2 traffic, tránh việc tất cả endpoint cùng connect với một host ngoài network và blend vào admin traffic.
+
+| Architecture Model | Connection Mechanics | Detection Considerations |
+|---|---|---|
+| **Traditional Hub-and-Spoke** | Each compromised endpoint maintains an independent external connection. | Generates multiple outbound connections easily flagged by network perimeter analysis. |
+| **Agent-to-Agent (P2P)** | Compromised hosts proxy commands internally through a designated gateway. | Drastically reduces network footprint by utilizing a single external egress point. |
+
+---
+<!-- class: default -->
+
+<style scoped>
+h1 {
+  text-align: center;
+  margin-top: 0px;
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+h4 {
+  border-bottom: none;
+  margin-top: 10px;
+  font-size: 30px;
+}
+p, li {
+  font-size: 24px;
+  line-height: 1.6;
+  margin-bottom: 18px;
+}
+strong {
+  color: #0056b3;
+}
+</style>
+
+# T1021.002 - SMB admin share
+
+#### P2P C2 applications
+
+* **Internal SMB Beacons:** Các offensive tool (ví dụ: `Cobalt Strike`) khởi tạo các listening named pipes trên các secondary endpoints thay vì listening trên các network sockets.
+* **Pipe Masquerading:** Attackers ngụy trang các malicious named pipes bằng cách đổi tên thành các pipes thông thường (chẳng hạn như browser crash reporting pipes) để blend vào system noise.
+* **Gateway Relay:** Gateway agent kết nối đến các internal named pipes thông qua SMB, forward commands và exfiltrate data trở lại thông qua một C2 channel duy nhất, nhằm tránh sự chú ý khi có quá nhiều endpoint connect ra mạng internet.
