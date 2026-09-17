@@ -1337,3 +1337,357 @@ strong {
 * **Internal SMB Beacons:** Các offensive tool (ví dụ: `Cobalt Strike`) khởi tạo các listening named pipes trên các secondary endpoints thay vì listening trên các network sockets.
 * **Pipe Masquerading:** Attackers ngụy trang các malicious named pipes bằng cách đổi tên thành các pipes thông thường (chẳng hạn như browser crash reporting pipes) để blend vào system noise.
 * **Gateway Relay:** Gateway agent kết nối đến các internal named pipes thông qua SMB, forward commands và exfiltrate data trở lại thông qua một C2 channel duy nhất, nhằm tránh sự chú ý khi có quá nhiều endpoint connect ra mạng internet.
+
+---
+<!-- class: default -->
+
+<style scoped>
+h1 {
+  text-align: center;
+  margin-top: 0px;
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+h4 {
+  border-bottom: none;
+  margin-top: 10px;
+  font-size: 30px;
+}
+p, li {
+  font-size: 24px;
+  line-height: 1.6;
+  margin-bottom: 18px;
+}
+strong {
+  color: #0056b3;
+}
+</style>
+
+# T1021.002 - SMB admin share
+
+#### Telemetry
+
+* **Heuristic Analysis:** So sánh network flow data (ví dụ: `conn.log` của Zeek) với baseline để flag các workstations kết nối đến một số lượng peers bất thường qua TCP port 445.
+* **Deep Packet Inspection (Protocol Analysis):** Parse SMB traffic thông qua PCAP hoặc các network security monitors (ví dụ: `smb_files.log` và `dce_rpc.log` của Zeek) để extract các named pipes cụ thể được access qua `IPC$` share. Điều này cho phép phân biệt các custom P2P proxy pipes với normal pipes usage, chẳng hạn như `\pipe\spoolss` hoặc `\pipe\netlogon`.
+
+---
+<!-- class: default -->
+
+<style scoped>
+table {
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 30px;
+  font-size: 19px;
+  border-collapse: collapse;
+  width: 100%;
+}
+th, td {
+  border: 1px solid #ccc;
+  padding: 12px;
+  text-align: left;
+  vertical-align: top;
+}
+th {
+  background-color: #f4f4f4;
+  color: #333;
+}
+strong {
+  color: #0056b3;
+}
+code {
+  white-space: nowrap;
+}
+</style>
+
+| Event Source | Telemetry Focus | Detection Logic & Indicators |
+|---|---|---|
+| **Security Event 4624** (Logon) | Network Logons (Type 3) via NTLM / NTLMv2. | Rapid, sequential Type 3 events across multiple target machines from an unexpected workstation source serve as high-fidelity indicators of credential reuse and lateral movement. |
+| **Security Event 5140 / 5145** (Share Access) | Target `ShareName` (`ADMIN$`, `C$`, `IPC$`). | Flag non-administrative workstations accessing default admin shares for binary staging or accessing `IPC$` to establish named pipe connections. |
+| **System Event 7045** (Service Creation) | `SVCCTL` RPC interactions; `ServiceName` and `ImagePath` fields. | Detects lateral movement execution tools; exposes physical payload paths (e.g., PsExec) or embedded execution command strings directly within the `ImagePath` (e.g., smbexec). |
+| **Sysmon Event 1** (Process Creation) | Process lineage (parent-child trees) running as `NT AUTHORITY\SYSTEM`. | Monitor native system core processes (`services.exe`, `WmiPrvSE.exe`) unexpectedly spawning command-line interpreters (`cmd.exe`, `powershell.exe`) to execute remote payloads. |
+
+
+---
+<!-- class: default -->
+
+<style scoped>
+table {
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 30px;
+  font-size: 16px;
+  border-collapse: collapse;
+  width: 100%;
+}
+th, td {
+  border: 1px solid #ccc;
+  padding: 12px;
+  text-align: left;
+  vertical-align: top;
+}
+h4 {
+  border-bottom: none;
+  margin-top: 10px;
+  font-size: 30px;
+}
+th {
+  background-color: #f4f4f4;
+  color: #333;
+}
+strong {
+  color: #0056b3;
+}
+code {
+  white-space: nowrap;
+}
+</style>
+#### Simulation
+| Threat Actor|  Mechanics | Key Telemetry & Artifacts |
+|---|---|---|
+| **BlackEnergy** (`psexec`) | Drops payload to `ADMIN$`. Executes via `cmd.exe /c certutil` (hosted via HTTP) to bypass the 5-minute SCM timeout limit. | **Evt 5140/5145:** Access to `ADMIN$` and `IPC$` (`\pipe\svcctl`).<br><br>**Evt 7045:** Creation of a dynamic, randomized alphanumeric service. |
+| **FIN8** (`smbexec`) | Establishes a semi-interactive shell using native `%COMSPEC%` and temporary batch scripts without dropping a compiled binary. | **Evt 7045:** `%COMSPEC%` command string exposed directly in `ImagePath`.<br><br>**Sysmon 1:** `cmd.exe` executing echo commands.<br><br>**Evt 5145:** `C$` share access for `__output` file. |
+| **APT41** (`wmiexec`) | Two-stage staging: Transfers payload to `C:\Windows` via SMB, then triggers execution via DCOM/WMI. | **Sysmon 1:** `WmiPrvSE.exe` spawns `cmd.exe`, redirecting output to `127.0.0.1\ADMIN$`.<br><br>**Evt 5145:** `ADMIN$` share access to read the temporary output file. |
+
+
+---
+<!-- class: default -->
+
+<style scoped>
+h1 {
+  text-align: center;
+  margin-top: 0px;
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+h4 {
+  border-bottom: none;
+  margin-top: 10px;
+  font-size: 30px;
+}
+p, li {
+  font-size: 26px;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+strong {
+  color: #0056b3;
+}
+code {
+  white-space: nowrap;
+}
+</style>
+
+# T1021.002 - SMB admin share
+
+#### Mitigation
+
+* **Local Administrator Password Solution (LAPS):** Khởi tạo ngẫu nhiên và quản lý tập trung mật khẩu admin trên toàn domain. Điều này đảm bảo rằng việc local admin NTLM hash trên một máy trạm không thể sử dụng để authenticate vào một máy trạm khác.
+* **Segmentation:** Sử dụng host-based firewall để block TCP port 445 traffic cho các workstations không sử dụng SMB communication.
+* **Principle of Least Privilege:** Audit và restrict các local admin group memberships. Nếu không có quyền admin, các accounts bình thường không thể access vào các admin shares (`ADMIN$`, `C$`) hoặc bind vào các RPC endpoints như `\pipe\svcctl`.
+
+
+---
+<!-- class: default -->
+
+<style scoped>
+h1 {
+  text-align: center;
+  margin-top: 0px;
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+h4 {
+  border-bottom: none;
+  margin-top: 10px;
+  font-size: 30px;
+}
+p, li {
+  font-size: 26px;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+</style>
+
+# CTI Training
+
+#### The CTI Mapping Process
+
+* Tìm hành vi
+* Nghiên cứu hành vi
+* Map hành vi thành tactics
+* Nhận diện techniques và sub-techniques
+* So sánh kết quả với các analysts khác
+
+---
+<!-- class: default -->
+
+<style scoped>
+h1 {
+  text-align: center;
+  margin-top: 0px;
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+h4 {
+  border-bottom: none;
+  margin-top: 10px;
+  font-size: 30px;
+}
+p, li {
+  font-size: 24px;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+strong {
+  color: #0056b3;
+}
+</style>
+
+# CTI Training
+
+#### Find & Research Behaviors
+
+* **Finding in Narrative Reporting:** Tìm các động từ chỉ hành động (ví dụ: "installed," "created scheduled task") mô tả các bước thực hiện, đồng thời loại bỏ các indicators không phải hành động như file hashes hoặc infrastructure IP addresses.
+* **Finding in Raw Data:** Nhận diện các behaviors trực tiếp từ các technical artifacts, chẳng hạn như command execution được capture thông qua Sysmon, sự thay đổi registry key, hoặc network flow bất thường.
+* **Contextual Research:** Đọc và nghiên cứu thêm các hành vi đã phát hiện để hiểu rõ cách chúng hoạt động của chúng. Điều này đòi hỏi quá trình phân tích protocol có liên quan (ví dụ: SMB hoặc SOCKS routing) và áp dụng kiến thức chuyên môn để xâu chuỗi các raw artifacts lại với nhau.
+
+---
+<!-- class: default -->
+
+<style scoped>
+h1 {
+  text-align: center;
+  margin-top: 0px;
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+h4 {
+  border-bottom: none;
+  margin-top: 10px;
+  font-size: 30px;
+}
+p, li {
+  font-size: 24px;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+strong {
+  color: #0056b3;
+}
+</style>
+
+# CTI Training
+
+#### Translate to Tactic & Identify Techniques
+
+* **Translate to Tactic (Intent):** Đánh giá hành vi để xác định mục tiêu của attackers. Mặc dù các reports thường ghi mục tiêu này, quá trình phân tích dữ liệu thô đòi hỏi domain expertise để map các isolated artifacts thành các tactics.
+* **Identify Techniques (Methods):** Phân tích từ tactic đã được xác định xuống đến technique chính xác, luôn luôn mapping xuống sub-techniques khi có đầy đủ thông tin.
+* **Mapping Strategies:** Tận dụng tìm kiếm từ khóa trên ATT&CK matrix, phân tích ví dụ về các procedure trên các group/software pages, và review các định nghĩa technique bên trong tactic.
+* **Concurrent Techniques:** Nhận thức rằng một procedure thường map với nhiều techniques trùng nhau để xác định chính xác hành động và cách thực hiện chúng.
+
+---
+<!-- class: default -->
+
+<style scoped>
+h1 {
+  text-align: center;
+  margin-top: 0px;
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+h4 {
+  border-bottom: none;
+  margin-top: 10px;
+  font-size: 30px;
+}
+p, li {
+  font-size: 22px;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+strong {
+  color: #0056b3;
+}
+</style>
+
+# CTI Training
+
+#### Hedge Biases
+
+* **Consumer Biases:** Cần đề phòng Novelty Bias (tập trung chủ yếu vào các mối đe dọa mới nổi, hấp dẫn) và Availability Bias (dựa vào các techniques dễ nhớ thay vì search trên toàn bộ matrix).
+* **Source & Visibility Biases:** Nhận thức rằng raw intelligence thường bị skewed nặng nề về phía vendor reporting và các giải pháp cụ thể mà org đã deploy, tạo ra các điểm mù.
+* **Mitigation Strategies:**
+  * **Collaborate:** So sánh các mappings với các analysts khác để cover các nhiều technical domains và chủ động loại trừ bias cá nhân.
+  * **Diversify & Calibrate:** Thêm nhiều data source và điều chỉnh nơi có lỗ hổng thông tin.
+  * **Prioritize the Known:** Tập trung vào việc track các attacker đã biết thay vì cố gắng thực hiện các so sánh hoặc đuổi theo những điều bất thường.
+
+
+  
+---
+<!-- class: default -->
+
+<style scoped>
+h1 {
+  text-align: center;
+  margin-top: 0px;
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+h4 {
+  border-bottom: none;
+  margin-top: 10px;
+  font-size: 30px;
+}
+p, li {
+  font-size: 24px;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+strong {
+  color: #0056b3;
+}
+</style>
+
+# CTI Training
+
+#### Making defensive recommendation
+
+* **Step 0: Prioritize Techniques:** Lọc ATT&CK matrix thành một nhóm những kỹ thuật bằng cách xác định những kỹ thuật hay được lặp lại bởi các attackers và review các gaps hiện có.
+* **Step 1 & 2: Research Defensive Options:** Tham khảo ATT&CK knowledge base, Cyber Analytics Repository (CAR), và các playbooks để xác định phương pháp phát hiện và ngăn chặn cho các kỹ thuật ở step 0.
+* **Step 3 & 4: Evaluate Organizational Trade-Offs:** Cân nhắc giữa giá trị phòng thủ mà giải pháp mang lại vs thực tế hoạt động và constraints của cty, tập đoàn.
+* **Step 5: Deliver Actionable Recommendations:** Đưa ra các giải pháp phù hợp.
+
+
+---
+<!-- class: default -->
+
+<style scoped>
+h1 {
+  text-align: center;
+  margin-top: 0px;
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+h4 {
+  border-bottom: none;
+  margin-top: 10px;
+  font-size: 30px;
+}
+p, li {
+  font-size: 24px;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+strong {
+  color: #0056b3;
+}
+</style>
+
+# RansomHub
+
+#### Overview & Structural Model
+
+* **Operational Overview:** Một mô hình Ransomware-as-a-Service (RaaS) tập trung vào double extortion, kết hợp data exfiltration với data encryption.
+* **Decentralized Affiliate Model:** Các core developers duy trì các payload builders, extortion leak sites, và negotiation infrastructure, trong khi các affiliates độc lập chịu trách nhiệm hoàn toàn cho initial access, lateral movement, và payload deployment.
+* **Incentive Structure:** Các operations được mở rộng cực nhanh bằng cách cho phép affiliates giữ lại lên đến 90% tiền chuộc, qua đó thu hút các attackers giỏi tiến hành xâm nhập network.
