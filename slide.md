@@ -1691,3 +1691,140 @@ strong {
 * **Operational Overview:** Một mô hình Ransomware-as-a-Service (RaaS) tập trung vào double extortion, kết hợp data exfiltration với data encryption.
 * **Decentralized Affiliate Model:** Các core developers duy trì các payload builders, extortion leak sites, và negotiation infrastructure, trong khi các affiliates độc lập chịu trách nhiệm hoàn toàn cho initial access, lateral movement, và payload deployment.
 * **Incentive Structure:** Các operations được mở rộng cực nhanh bằng cách cho phép affiliates giữ lại lên đến 90% tiền chuộc, qua đó thu hút các attackers giỏi tiến hành xâm nhập network.
+
+
+---
+<!-- class: default -->
+
+<style scoped>
+h1 {
+  text-align: center;
+  margin-top: 0px;
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+h4 {
+  border-bottom: none;
+  margin-top: 10px;
+  font-size: 30px;
+}
+p, li {
+  font-size: 24px;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+strong {
+  color: #0056b3;
+}
+</style>
+
+# RansomHub
+
+#### TTP Diversity
+
+* **Decentralized attack Chains:** Bởi vì RansomHub dựa hoàn toàn vào các affiliates hoạt động độc lập và Initial Access Brokers để tiến hành network intrusions, không tồn tại một "RansomHub attack". Các Tactics, Techniques, and Procedures (TTPs) thay đổi liên tục giữa các campaigns dựa hoàn toàn vào việc affiliate nào tấn công.
+* **Scenario Blueprints:** 2 profile sau đây được tạo ra để vừa cho thấy các affiliates sử dụng các kỹ thuật khác nhau, vừa cho thấy sự thay đổi, tiến hóa theo thời gian của họ malware RansomHub
+
+---
+<!-- class: default -->
+
+<style scoped>
+h1 {
+  text-align: center;
+  margin-top: 0px;
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+h4 {
+  border-bottom: none;
+  margin-top: 10px;
+  font-size: 30px;
+}
+table {
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 20px;
+  font-size: 19px;
+  border-collapse: collapse;
+  width: 100%;
+}
+th, td {
+  border: 1px solid #ccc;
+  padding: 12px;
+  text-align: left;
+  vertical-align: top;
+}
+th {
+  background-color: #f4f4f4;
+  color: #333;
+  text-transform: capitalize;
+}
+strong {
+  color: #0056b3;
+}
+code {
+  white-space: nowrap;
+}
+</style>
+
+
+#### Profile A
+
+| Emulation Phase | Operational Objectives | Technique Mapping | Toolset & Procedures |
+|---|---|---|---|
+| **Phase 1: foothold & persistence** | breach the perimeter and establish a reliable backdoor | T1566.001, T1189, T1059.001, T1136.001 | deliver NODESTEALER via spearphishing attachment; execute initial staging scripts via PowerShell; create local accounts to maintain access |
+| **Phase 2: defense evasion & privilege escalation** | neutralize endpoint telemetry and acquire administrative contexts | T1562.001, T1070, T1003.001, T1068 | deploy EDRKillShifter to terminate AV/EDR; extract clear-text passwords from LSASS memory using Mimikatz; exploit Zerologon for SYSTEM privileges; clear Windows event logs via `wevtutil` |
+| **Phase 3: discovery and lateral movement** | discover critical infrastructure and move laterally | T1018, T1135, T1021.002, T1570 | enumerate network shares and backup repositories; move laterally across workstations using SMBv2 and `PsExec`; transfer payloads via `xcopy` |
+| **Phase 4: final objectives** | stage sensitive data, exfiltrate, and deploy the encryptor | T1560.001, T1567.002, T1490, T1486 | compress data into ZIP archives; exfiltrate to cloud storage via Rclone; destroy Volume Shadow Copies using `vssadmin`; execute hybrid Curve25519/AES payload |
+
+
+---
+<!-- class: default -->
+
+<style scoped>
+h1 {
+  text-align: center;
+  margin-top: 0px;
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+h4 {
+  border-bottom: none;
+  margin-top: 10px;
+  font-size: 30px;
+}
+table {
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 20px;
+  font-size: 19px;
+  border-collapse: collapse;
+  width: 100%;
+}
+th, td {
+  border: 1px solid #ccc;
+  padding: 12px;
+  text-align: left;
+  vertical-align: top;
+}
+th {
+  background-color: #f4f4f4;
+  color: #333;
+  text-transform: capitalize;
+}
+strong {
+  color: #0056b3;
+}
+code {
+  white-space: nowrap;
+}
+</style>
+
+
+#### Profile B
+
+| Emulation Phase | Operational Objectives | Technique Mapping | Toolset & Procedures |
+|---|---|---|---|
+| **Phase 1: social engineering & access** | manipulate IT personnel to bypass perimeter authentication | T1566.004, T1098, T1078 | execute voice phishing against IT help desks to reset MFA controls and hijack valid accounts |
+| **Phase 2/3: infrastructure hijacking** | leverage virtualization layers to conceal lateral movement | T1021, T1569, T1564.006 | spin up a rogue Virtual Machine directly within the victim's `ESXi` environment for lateral movement |
+| **Phase 4: internal extortion** | deploy internal defacement and communicate demands directly | T1491.001, T1486, T1567.002 | send ransom demands internally via compromised Microsoft Teams accounts rather than dropping standard text files, then use double extortion technique |
